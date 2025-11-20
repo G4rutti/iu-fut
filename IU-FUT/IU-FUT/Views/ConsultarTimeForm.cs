@@ -1,5 +1,6 @@
 using IU_FUT.Controllers;
 using IU_FUT.Models;
+using System.Linq;
 
 namespace IU_FUT.Views
 {
@@ -14,7 +15,25 @@ namespace IU_FUT.Views
             _jogadorLogado = jogador;
             InitializeComponent();
             // Conforme diagrama: 1: O ator seleciona consultar times()
+            CarregarComboBoxJogadores();
             CarregarGrid();
+        }
+
+        /// <summary>
+        /// Carrega o combobox de jogadores para filtro
+        /// </summary>
+        private void CarregarComboBoxJogadores()
+        {
+            var jogadorController = new JogadorController();
+            var jogadores = jogadorController.ListarJogadores();
+            
+            cmbJogador.Items.Clear();
+            cmbJogador.Items.Add("Todos");
+            foreach (var jogador in jogadores.OrderBy(j => j.Nome))
+            {
+                cmbJogador.Items.Add($"{jogador.Nome} (ID: {jogador.Id})");
+            }
+            cmbJogador.SelectedIndex = 0;
         }
 
         /// <summary>
@@ -26,6 +45,9 @@ namespace IU_FUT.Views
             lstTimes.Items.Clear();
             // 1.1.1: listarTimes() : List<Time>
             var times = _controller.ListarTime(null);
+            
+            // Aplicar filtros
+            times = AplicarFiltros(times);
 
             foreach (var time in times)
             {
@@ -36,6 +58,73 @@ namespace IU_FUT.Views
                 item.Tag = time;
                 lstTimes.Items.Add(item);
             }
+        }
+
+        /// <summary>
+        /// Aplica os filtros selecionados na lista de times
+        /// </summary>
+        private List<Time> AplicarFiltros(List<Time> times)
+        {
+            var resultado = times.AsEnumerable();
+
+            // Filtro por nome
+            if (!string.IsNullOrWhiteSpace(txtNome.Text))
+            {
+                var nome = txtNome.Text.ToLower();
+                resultado = resultado.Where(t => t.Nome.ToLower().Contains(nome));
+            }
+
+            // Filtro por quantidade mínima de jogadores
+            if (numJogadoresMin.Value > 0)
+            {
+                var min = (int)numJogadoresMin.Value;
+                resultado = resultado.Where(t => t.Jogadors.Count >= min);
+            }
+
+            // Filtro por quantidade máxima de jogadores
+            if (numJogadoresMax.Value > 0 && numJogadoresMax.Value < 100)
+            {
+                var max = (int)numJogadoresMax.Value;
+                resultado = resultado.Where(t => t.Jogadors.Count <= max);
+            }
+
+            // Filtro por descrição
+            if (!string.IsNullOrWhiteSpace(txtDescricao.Text))
+            {
+                var descricao = txtDescricao.Text.ToLower();
+                resultado = resultado.Where(t => t.Descricao != null && t.Descricao.ToLower().Contains(descricao));
+            }
+
+            // Filtro por jogador específico
+            if (cmbJogador.SelectedIndex > 0 && cmbJogador.SelectedItem != null)
+            {
+                var itemSelecionado = cmbJogador.SelectedItem.ToString();
+                if (itemSelecionado != null && itemSelecionado.Contains("ID:"))
+                {
+                    var idStr = itemSelecionado.Split(new[] { "ID:" }, StringSplitOptions.None)[1].Trim().TrimEnd(')');
+                    if (int.TryParse(idStr, out int jogadorId))
+                    {
+                        resultado = resultado.Where(t => t.Jogadors.Any(j => j.Id == jogadorId));
+                    }
+                }
+            }
+
+            return resultado.ToList();
+        }
+
+        private void btnFiltrar_Click(object sender, EventArgs e)
+        {
+            CarregarGrid();
+        }
+
+        private void btnLimparFiltros_Click(object sender, EventArgs e)
+        {
+            txtNome.Clear();
+            numJogadoresMin.Value = 0;
+            numJogadoresMax.Value = 100;
+            txtDescricao.Clear();
+            cmbJogador.SelectedIndex = 0;
+            CarregarGrid();
         }
 
         private void lstTimes_SelectedIndexChanged(object sender, EventArgs e)

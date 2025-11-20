@@ -1,5 +1,6 @@
 using IU_FUT.Controllers;
 using IU_FUT.Models;
+using System.Linq;
 
 namespace IU_FUT.Views
 {
@@ -18,7 +19,33 @@ namespace IU_FUT.Views
             _jogadorLogado = jogador;
             InitializeComponent();
             // Conforme diagrama: 1: O ator acessa a tela de consulta de partidas()
+            CarregarComboBoxes();
             CarregarGrid();
+        }
+
+        /// <summary>
+        /// Carrega os comboboxes com dados para filtros
+        /// </summary>
+        private void CarregarComboBoxes()
+        {
+            var campos = _controller.ListarLocais();
+            
+            cmbCampo.Items.Clear();
+            cmbCampo.Items.Add("Todos");
+            foreach (var campo in campos)
+            {
+                cmbCampo.Items.Add(campo.Nome);
+            }
+            cmbCampo.SelectedIndex = 0;
+
+            cmbCidade.Items.Clear();
+            cmbCidade.Items.Add("Todas");
+            var cidades = campos.Select(c => c.Cidade).Distinct().OrderBy(c => c).ToList();
+            foreach (var cidade in cidades)
+            {
+                cmbCidade.Items.Add(cidade);
+            }
+            cmbCidade.SelectedIndex = 0;
         }
 
         /// <summary>
@@ -30,6 +57,9 @@ namespace IU_FUT.Views
             lstPartidas.Items.Clear();
             // 1.1.1: listarPartidas() : List<Partidas>
             var partidas = _controller.ListarPartidas(null);
+            
+            // Aplicar filtros
+            partidas = AplicarFiltros(partidas);
 
             foreach (var partida in partidas)
             {
@@ -42,6 +72,94 @@ namespace IU_FUT.Views
                 item.Tag = partida;
                 lstPartidas.Items.Add(item);
             }
+        }
+
+        /// <summary>
+        /// Aplica os filtros selecionados na lista de partidas
+        /// </summary>
+        private List<Partidum> AplicarFiltros(List<Partidum> partidas)
+        {
+            var hoje = DateOnly.FromDateTime(DateTime.Now);
+            var resultado = partidas.AsEnumerable();
+
+            // Filtro por data início
+            if (dtpDataInicio.Checked)
+            {
+                var dataInicio = DateOnly.FromDateTime(dtpDataInicio.Value);
+                resultado = resultado.Where(p => !p.DataInicio.HasValue || p.DataInicio.Value >= dataInicio);
+            }
+
+            // Filtro por data fim
+            if (dtpDataFim.Checked)
+            {
+                var dataFim = DateOnly.FromDateTime(dtpDataFim.Value);
+                resultado = resultado.Where(p => !p.DataFim.HasValue || p.DataFim.Value <= dataFim);
+            }
+
+            // Filtro por campo
+            if (cmbCampo.SelectedIndex > 0 && cmbCampo.SelectedItem != null)
+            {
+                var nomeCampo = cmbCampo.SelectedItem.ToString();
+                resultado = resultado.Where(p => p.Campo != null && p.Campo.Nome == nomeCampo);
+            }
+
+            // Filtro por cidade
+            if (cmbCidade.SelectedIndex > 0 && cmbCidade.SelectedItem != null)
+            {
+                var cidade = cmbCidade.SelectedItem.ToString();
+                resultado = resultado.Where(p => p.Campo != null && p.Campo.Cidade == cidade);
+            }
+
+            // Filtro por status
+            if (cmbStatus.SelectedIndex > 0 && cmbStatus.SelectedItem != null)
+            {
+                var status = cmbStatus.SelectedItem.ToString();
+                switch (status)
+                {
+                    case "Disponíveis (com vagas)":
+                        resultado = resultado.Where(p => _controller.ExisteVaga(p.Id));
+                        break;
+                    case "Sem vagas":
+                        resultado = resultado.Where(p => !_controller.ExisteVaga(p.Id));
+                        break;
+                    case "Futuras":
+                        resultado = resultado.Where(p => p.DataInicio.HasValue && p.DataInicio.Value >= hoje);
+                        break;
+                    case "Passadas":
+                        resultado = resultado.Where(p => p.DataInicio.HasValue && p.DataInicio.Value < hoje);
+                        break;
+                }
+            }
+
+            // Filtro por busca geral (texto)
+            if (!string.IsNullOrWhiteSpace(txtBusca.Text))
+            {
+                var busca = txtBusca.Text.ToLower();
+                resultado = resultado.Where(p =>
+                    (p.Descricao != null && p.Descricao.ToLower().Contains(busca)) ||
+                    (p.Campo != null && p.Campo.Nome.ToLower().Contains(busca)) ||
+                    (p.Campo != null && p.Campo.Endereco.ToLower().Contains(busca)) ||
+                    (p.Campo != null && p.Campo.Cidade.ToLower().Contains(busca))
+                );
+            }
+
+            return resultado.ToList();
+        }
+
+        private void btnFiltrar_Click(object sender, EventArgs e)
+        {
+            CarregarGrid();
+        }
+
+        private void btnLimparFiltros_Click(object sender, EventArgs e)
+        {
+            dtpDataInicio.Checked = false;
+            dtpDataFim.Checked = false;
+            cmbCampo.SelectedIndex = 0;
+            cmbCidade.SelectedIndex = 0;
+            cmbStatus.SelectedIndex = 0;
+            txtBusca.Clear();
+            CarregarGrid();
         }
 
         private void lstPartidas_SelectedIndexChanged(object sender, EventArgs e)
